@@ -1,2 +1,2 @@
-g++ -std=c++20 -I parser\ main.cpp parser\AnonLabels.cpp parser\ASTNode.cpp parser\expressionparser.cpp parser\expr_rules.cpp parser\expr_tokens.cpp parser\grammar_rule.cpp parser\opcodedict.cpp parser\parser.cpp parser\symboltable.cpp parser\tokenizer.cpp parser\utils.cpp -o pasm.exe
- 
+g++ -std=c++20 -I src/parser/ src/main.cpp src/parser/AnonLabels.cpp src/parser/ASTNode.cpp src/parser/expressionparser.cpp src/parser/expr_rules.cpp src/parser/expr_tokens.cpp src/parser/grammar_rule.cpp src/parser/opcodedict.cpp src/parser/parser.cpp src/parser/symboltable.cpp src/parser/tokenizer.cpp src/parser/utils.cpp -o pasm.exe
+
