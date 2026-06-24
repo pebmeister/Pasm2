@@ -22,8 +22,8 @@
 
 #pragma once
 
-#define __USE_BOOST_REGEX__
-// #define __USE_STD_REGEX__
+// #define __USE_BOOST_REGEX__
+#define __USE_STD_REGEX__
 
 #include <utility>
 #include <vector>
