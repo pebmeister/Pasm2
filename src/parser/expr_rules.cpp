@@ -28,6 +28,115 @@ namespace fs = std::filesystem;
 #define __ORIGINAL_OP_PROCESSOR__ 1
 // #define __DEBUG_MACROS__ 1
 
+static std::shared_ptr<ASTNode> handle_macro_call(Parser& p, const auto& args, int count)
+{
+
+	std::cout << "handle macro call args " << args.size() << "\n";
+
+	auto node = std::make_shared<ASTNode>(MacroCall, p.sourcePos);
+
+	if (count == 0)
+		node->pc_Start = p.PC;
+
+	if (p.macroCallDepth > 100) {
+		p.throwError("Macro recursion depth exceeded (possible infinite recursion)");
+	}
+
+	std::shared_ptr<MacroDefinition> macEntry;
+
+	std::string macroName;
+	auto pos = p.sourcePos;
+	if (args.size() == 1) {
+	    const Token& tok = std::get<Token>(node->children[0]);
+		macroName = tok.value;
+		pos  = tok.pos;
+	}
+	else {		
+		auto nameNode = std::get<std::shared_ptr<ASTNode>>(args[0]);		
+		Token nameTok = std::get<Token>(nameNode->children[0]);
+		node->sourcePosition = nameTok.pos;
+		macroName = nameTok.value;
+		pos = nameTok.pos;
+	}
+
+	if (!p.macroTable.count(macroName)) {
+		p.throwError("Unknown macro: " + macroName);
+	}
+
+	// Copy macro body and expand parameters
+	macEntry = p.macroTable[macroName];
+
+	if (count == 0) {
+		macEntry->timesCalled++;
+	}
+	std::vector<std::pair<SourcePos, std::string>> macrolines = 	macEntry->bodyText;
+
+
+	if (std::holds_alternative<std::shared_ptr<ASTNode>>(args[1])) {					
+		auto exprList = std::get<std::shared_ptr<ASTNode>>(args[1]);
+
+		int argNum = 1;
+		for (auto& expr : exprList->children) {
+			if (std::holds_alternative<std::shared_ptr<ASTNode>>(expr)) {
+				auto exprNode = std::get<std::shared_ptr<ASTNode>>(expr);
+				exprExtract(argNum, exprNode, macrolines);
+			}
+		}
+	}
+
+	std::cout << "call setmacroscope\n";
+
+	// adjust macro local labels
+	setmacroscope(macroName, macEntry->timesCalled, node, macrolines);
+
+	#ifdef __DEBUG_MACROS__
+		std::cout << "\n======= MACRO " << macroName << " ========= \n";
+		std::cout << "After scope\n";
+		for (auto& [pos, line] : macrolines) {
+			std::cout << line << "\n";
+		}
+	#endif
+	
+	std::cout << "call currentMacros.insert\n";
+
+	// Expansion with proper cleanup on exceptions
+	p.currentMacros.insert(macroName);
+	try {
+
+		std::cout << "inside try\n";
+
+		// Remove entire original call line. After this call p.current_pos
+		// is the correct insertion anchor for the expanded tokens.
+		p.RemoveCurrentLine();
+		const int insertPos = static_cast<int>(p.current_pos);
+
+		// Tokenize expanded macro body (tokenizer must emit EOL tokens)
+		auto expanded = tokenizer.tokenize(macrolines);
+		Token eolTok;
+		eolTok.type = TOKEN_TYPE::EOL;
+		expanded.insert(expanded.begin(), eolTok);
+
+		// Anchor tokens to the call site for listing
+		for (auto& t : expanded) t.pos = pos;
+
+		// Insert expanded tokens at the canonical anchor and begin parsing them
+		p.InsertTokens(insertPos, expanded);
+		p.current_pos = insertPos;
+
+		// Successful expansion; done.
+		p.currentMacros.erase(macroName);
+		p.macroCallDepth--;
+	}
+	catch (const std::exception& e) {
+		// Ensure cleanup before propagating
+		p.currentMacros.erase(macroName);
+		p.macroCallDepth--;
+		p.throwError(std::string("In macro '") + macroName + "': " + e.what());
+	}
+
+	node->value = pos.line;
+	return node;
+}
 
 static void handle_label_def(std::shared_ptr<ASTNode>& node, Parser& p, SymTable& table, const Token& tok)
 {
